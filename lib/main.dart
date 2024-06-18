@@ -95,7 +95,7 @@ class _MiningGameState extends State<MiningGame> {
 
   List<int> generateRandomNumbers() {
     final List<int> randomNumbers = [];
-    while (randomNumbers.length < 0) {
+    while (randomNumbers.length < 5) {
       final int randomNumber = Random().nextInt(25);
       if (!randomNumbers.contains(randomNumber)) {
         randomNumbers.add(randomNumber);
