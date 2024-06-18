@@ -3,10 +3,13 @@ import 'dart:developer' show log;
 import 'dart:math' show Random;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:mininggame/db_handler.dart';
 import 'package:mininggame/retry_handler.dart';
 import 'package:mininggame/mine_handler.dart';
 import 'package:mininggame/widgets/mining_tile.dart';
+import 'package:supabase/supabase.dart';
 
 void main() {
   runApp(const MyApp());
@@ -38,7 +41,7 @@ void initState() {
         ),
         home: child,
       ),
-      child: const MiningGame(),
+      child: const RulesPage(),
     );
   }
 }
@@ -61,9 +64,20 @@ class _MiningGameState extends State<MiningGame> {
     initialize();
   }
 
-  void initialize() {
+  void checkIfUnderMaintainance() async {
+    final int winnersCount = await SupabaseHandler.instance.getWinnersCount();
+    if(winnersCount > 5) {
+      Navigator.pop(context);
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const UnderMaintainance()));
+    }
+  }
+
+  void initialize() async {
     mineHandler = MineHandler();
     startListening();
+    checkIfUnderMaintainance();
+    final DateTime now = DateTime.now();
+    await SupabaseHandler.instance.addGameSessionsData(sessionData: now.toString());
   }
 
   void startListening() {
@@ -81,7 +95,7 @@ class _MiningGameState extends State<MiningGame> {
 
   List<int> generateRandomNumbers() {
     final List<int> randomNumbers = [];
-    while (randomNumbers.length < 5) {
+    while (randomNumbers.length < 0) {
       final int randomNumber = Random().nextInt(25);
       if (!randomNumbers.contains(randomNumber)) {
         randomNumbers.add(randomNumber);
@@ -130,17 +144,35 @@ class _MiningGameState extends State<MiningGame> {
   }
 }
 
-class ResultPage extends StatelessWidget {
+class ResultPage extends StatefulWidget {
   ResultPage({super.key, required this.diamondCount, required this.mineCount,});
 
   final int diamondCount;
   final int mineCount;
 
+  @override
+  State<ResultPage> createState() => _ResultPageState();
+}
+
+class _ResultPageState extends State<ResultPage> {
   String kWinner = "Congrats! You've won the game!";
+
   String kLoser = "Game over. Better luck next!";
+
   String kAlmostWinner = "Nearly won! Just one more!";
 
+  String kWarning = 'Confirm the number above. We will use it to reach out to you for the reward. If the number is incorrect, the reward will be nullified.';
+
   int get _winCount => RetryHandler.instance.winCount;
+
+  final TextEditingController _numberController = TextEditingController();
+
+
+  @override
+  void dispose() {
+    _numberController.dispose();
+    super.dispose();
+  }
 
   String get _getResultMessage {
     if(_winCount >= 3) {
@@ -178,13 +210,33 @@ class ResultPage extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const TextField(),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12.w),
+            child: TextField(
+              controller: _numberController,
+              style: TextStyle(color: Colors.white, fontSize: 11.sp),
+              decoration: InputDecoration(
+                hintText: 'Enter your phone no to claim Netflix',
+                hintStyle: TextStyle(color: Colors.grey, fontSize: 11.sp),
+                
+              ),
+            ),
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12.w),
+            child: RichText(text: TextSpan(
+              children: [
+                TextSpan(text: '* ', style: TextStyle(color: Colors.red, fontSize: 10.sp)),
+                TextSpan(text: kWarning, style: TextStyle(color: Colors.white, fontSize: 10.sp)),
+              ],
+            )),
+          ),
           SizedBox(height: 10.h,),
           ElevatedButton(
           onPressed: () {
+            SupabaseHandler.instance.addNumber(number: _numberController.text);
             Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const MiningGame()));
-            RetryHandler.instance.resetCount(); 
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const ReachOutPage()));
           },
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF051828), // background color
@@ -323,5 +375,91 @@ class _RetryCountState extends State<RetryCount> {
       child: Text('Score: $winCount / 3', style: TextStyle(color: Colors.white, fontSize: 12.sp),),
     ),
   );
+  }
+}
+
+class ReachOutPage extends StatelessWidget {
+  const ReachOutPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0XFF0C2634),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('We will reach out to you soon!', style: TextStyle(color: Colors.white, fontSize: 20.sp),),  
+            SizedBox(height: 20.h,),
+            ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const MiningGame()));
+            RetryHandler.instance.resetCount(); 
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF051828), // background color
+          ),
+          child: const Text('Play Again', style: TextStyle(color: Colors.white)))
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class RulesPage extends StatelessWidget {
+  const RulesPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0XFF0C2634),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [ 
+            Text('Rules', style: TextStyle(color: Colors.white, fontSize: 20.sp),),
+            SizedBox(height: 20.h,),
+            Text('1. Find 20 diamonds before hitting 5 mines.', style: TextStyle(color: Colors.white, fontSize: 12.sp),),
+            Text('2. Do this for 3 consecutive rounds.', style: TextStyle(color: Colors.white, fontSize: 12.sp),),
+            Text('3. Win a 1-month Netflix subscription as a reward.', style: TextStyle(color: Colors.white, fontSize: 12.sp),),
+            Text("4. Unlimited chances if you don't succeed!", style: TextStyle(color: Colors.white, fontSize: 12.sp),),
+            SizedBox(height: 20.h,),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const MiningGame()));
+              },
+              style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF051828), // background color
+          ),
+          child: const Text('Play', style: TextStyle(color: Colors.white))),
+          ],
+        ),
+      ),
+    );
+
+  }
+}
+
+
+class UnderMaintainance extends StatelessWidget {
+  const UnderMaintainance({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+       backgroundColor: const Color(0XFF0C2634),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('We are under maintainance :(', style: TextStyle(color: Colors.white, fontSize: 20.sp),),
+            Text(' Please try again after some time', style: TextStyle(color: Colors.white, fontSize: 20.sp),),
+          ],
+        ),
+      ),
+    );
   }
 }

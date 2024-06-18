@@ -38,6 +38,7 @@ dependencies:
   flutter_bloc: ^8.1.6
   flutter_screenutil: ^5.9.3
   rxdart: ^0.28.0
+  supabase: ^1.0.1
  
 
 dev_dependencies:
