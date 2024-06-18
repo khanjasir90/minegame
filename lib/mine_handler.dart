@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:mininggame/retry_handler.dart';
 import 'package:rxdart/subjects.dart';
 
 enum MineResult {
   diamond,
   mine,
   completed,
+  win,
+  loss,
 }
 
 extension MineResultExt on MineResult {
   bool get isDiamond => this == MineResult.diamond;
   bool get isMine => this == MineResult.mine;
   bool get isCompleted => this == MineResult.completed;
+  bool get isWin => this == MineResult.win;
+  bool get isLoss => this == MineResult.loss;
 }
 
 class MineHandler extends ChangeNotifier{
@@ -37,8 +42,15 @@ class MineHandler extends ChangeNotifier{
     notifyListeners();
   }
 
-  void _checkIfCompleted() {
-    if(_mineCount == 5 ||  _diamondCount >= 20 || (diamondCount + mineCount) == 25) {
+  void _checkIfCompleted() async {
+    if(_diamondCount >= 20) {
+      RetryHandler.instance.incrementCount();
+      if(RetryHandler.instance.winCount >= 3) {
+        _mineResult.add(MineResult.completed);
+        return;
+      }
+      _mineResult.add(MineResult.win);
+    } else if(_mineCount >= 5) {
       _mineResult.add(MineResult.completed);
     }
   }

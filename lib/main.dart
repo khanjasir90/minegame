@@ -4,6 +4,7 @@ import 'dart:math' show Random;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:mininggame/retry_handler.dart';
 import 'package:mininggame/mine_handler.dart';
 import 'package:mininggame/widgets/mining_tile.dart';
 
@@ -11,8 +12,20 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+
+  @override
+void initState() {
+  super.initState();
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -45,12 +58,20 @@ class _MiningGameState extends State<MiningGame> {
   @override
   void initState() {
     super.initState();
+    initialize();
+  }
+
+  void initialize() {
     mineHandler = MineHandler();
     startListening();
   }
 
   void startListening() {
      mineHandler.mineResult.listen((MineResult result) {
+      if(result.isWin) {
+        Navigator.pop(context);
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const MiningGame()));
+      }
       if(result.isCompleted) {
         Navigator.pop(context);
         Navigator.push(context, MaterialPageRoute(builder: (_) => ResultPage(diamondCount: mineHandler.diamondCount, mineCount: mineHandler.mineCount,)));
@@ -79,8 +100,9 @@ class _MiningGameState extends State<MiningGame> {
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              height: 100.h,
+              height: 50.h,
             ),
+            const RetryCount(),
             SizedBox(
               child: Image.asset('assets/miner.png'),
             ),
@@ -114,27 +136,62 @@ class ResultPage extends StatelessWidget {
   final int diamondCount;
   final int mineCount;
 
-  String kWinner = "Congratulations! You've won the game!";
+  String kWinner = "Congrats! You've won the game!";
   String kLoser = "Game over. Better luck next!";
   String kAlmostWinner = "Nearly won! Just one more!";
 
+  int get _winCount => RetryHandler.instance.winCount;
+
   String get _getResultMessage {
-    if(diamondCount >= 20) {
+    if(_winCount >= 3) {
       return kWinner;
-    } else if(mineCount == 5) {
-      return kLoser;
-    } else {
+    } else if(_winCount >= 2) {
       return kAlmostWinner;
+    } else {
+      return kLoser;
     }
   }
 
   Image get _getEmoji {
-    if(diamondCount >= 20) {
+    if(_winCount >= 3) {
       return Image.asset('assets/win.png');
-    } else if(mineCount == 5) {
+    } else if(_winCount >= 2) {
       return Image.asset('assets/loss.png');
     } else {
       return Image.asset('assets/loss.png');
+    }
+  }
+
+  Widget _getClaimPrizeOrRetryBtn(BuildContext context) {
+    if(_winCount < 3) {
+      return ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const MiningGame()));
+            RetryHandler.instance.resetCount(); 
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF051828), // background color
+          ),
+          child: const Text('I want Netflix, Play Again', style: TextStyle(color: Colors.white)));
+    } else {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const TextField(),
+          SizedBox(height: 10.h,),
+          ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const MiningGame()));
+            RetryHandler.instance.resetCount(); 
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF051828), // background color
+          ),
+          child: const Text('Claim Netflix', style: TextStyle(color: Colors.white)))
+        ],
+      );
     }
   }
 
@@ -150,37 +207,9 @@ class ResultPage extends StatelessWidget {
           SizedBox(height: 10.h,),
           Text(_getResultMessage, style: TextStyle(color: Colors.white, fontSize: 20.sp),),
           SizedBox(height: 10.h,),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                child: Image.asset('assets/diamond.png'),
-              ),
-              SizedBox(width: 10.w,),
-              Text('$diamondCount', style: TextStyle(color: Colors.white, fontSize: 20.sp),),
-            ],
-          ),
+          Text('Your Score: ${RetryHandler.instance.winCount} / 3', style: TextStyle(color: Colors.white, fontSize: 16.sp),),
           SizedBox(height: 10.h,),
-           Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                child: Image.asset('assets/mine.png'),
-              ),
-              SizedBox(width: 10.w,),
-              Text('$mineCount', style: TextStyle(color: Colors.white, fontSize: 20.sp),),
-            ],
-          ),
-          SizedBox(height: 10.h,),
-        ElevatedButton(
-          onPressed: () {
-            Navigator.pop(context);
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const MiningGame()));
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF051828), // background color
-          ),
-          child: const Text('Play Again', style: TextStyle(color: Colors.white))),
+          _getClaimPrizeOrRetryBtn(context),
         ],
         ),
       ),
@@ -250,5 +279,49 @@ class _MineScoreCardState extends State<MineScoreCard> {
           ),
       ],
     );
+  }
+}
+
+
+class RetryCount extends StatefulWidget {
+  const RetryCount({super.key});
+
+  @override
+  State<RetryCount> createState() => _RetryCountState();
+}
+
+class _RetryCountState extends State<RetryCount> {
+
+  int winCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    winCount = RetryHandler.instance.winCount;
+    RetryHandler.instance.addListener(_updateWinCount);
+  }
+
+  void _updateWinCount() {
+    setState(() {
+      winCount = RetryHandler.instance.winCount;
+    });
+  }
+
+  @override
+  void dispose() {
+    // TODO: implement dispose
+    super.dispose();
+    RetryHandler.instance.removeListener(_updateWinCount);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 12.w),
+      child: Align(
+      alignment: Alignment.centerRight,
+      child: Text('Score: $winCount / 3', style: TextStyle(color: Colors.white, fontSize: 12.sp),),
+    ),
+  );
   }
 }
